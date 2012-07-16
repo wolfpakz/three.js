@@ -24,7 +24,8 @@
   <script src="build/Three.js"></script>
 
   <script>
-    var camera, scene, renderer, container;
+    var camera, scene, renderer, container, projector, board;
+    var particleMaterial;
 
     if (!Detector.webgl) Detector.addGetWebGLMessage();
 
@@ -45,6 +46,21 @@
 
       addBoard(scene);
 
+
+      particleMaterial = new THREE.ParticleCanvasMaterial( {
+
+  					program: function ( context ) {
+
+  						context.beginPath();
+  						context.arc( 0, 0, 1, 0, PI2, true );
+  						context.closePath();
+  						context.fill();
+
+  					}
+
+  				} );
+
+
       var sphere = createSphere(5, 32, 16)
       sphere.position.y = 5
       scene.add(sphere)
@@ -60,14 +76,38 @@
       // add to the scene
       scene.add(pointLight);
 
+      projector = new THREE.Projector();
+
       // create a WebGL renderer
       renderer = new THREE.WebGLRenderer();
 
       // start the renderer
       renderer.setSize(window.innerWidth, window.innerHeight);
       container.appendChild(renderer.domElement);
+
+      // listen for clicks
+      document.addEventListener( 'mousedown', onDocumentMouseDown, false );
     }
 
+    function onDocumentMouseDown(event) {
+      event.preventDefault();
+
+  				var vector = new THREE.Vector3( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1, 0.5 );
+  				projector.unprojectVector( vector, camera );
+
+  				var ray = new THREE.Ray( camera.position, vector.subSelf( camera.position ).normalize() );
+
+  				var intersects = ray.intersectObjects( [board] );
+
+  				if ( intersects.length > 0 ) {
+
+  					intersects[ 0 ].object.material.color.setHex( Math.random() * 0xffffff );
+  					var particle = new THREE.Particle( particleMaterial );
+  					particle.position = intersects[ 0 ].point;
+  					scene.add( particle );
+
+  				}
+    }
     function createSphere(radius, segments, rings) {
       // create the sphere's material
       var sphereMaterial =
@@ -107,7 +147,7 @@
       // create the board
       var boardWidth = 160, boardDepth = 160;
       var geometry   = new THREE.PlaneGeometry(boardWidth, boardDepth, 10, 10);
-      var board      = new THREE.Mesh(geometry, material);
+      board          = new THREE.Mesh(geometry, material);
 
       scene.add(board);
     }
