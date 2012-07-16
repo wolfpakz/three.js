@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<title>Show me a plane, damnit!!</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+<style>
+	body {
+		font-family: Monospace;
+		background-color: #f0f0f0;
+		margin: 0px;
+		overflow: hidden;
+	}
+
+</style>
+</head>
+<body>
+
+</body>
+
+<script language="javascript" type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+
+<script src="examples/js/Detector.js"></script>
+<script src="examples/js/Stats.js"></script>
+<script src="build/Three.js"></script>
+
+<script>
+
+  if (!Detector.webgl) Detector.addGetWebGLMessage();
+
+  var camera, scene, renderer, container;
+
+  init();
+  animate();
+
+  function init() {
+    container = document.createElement( 'div' );
+    document.body.appendChild( container );
+
+    // create a camera and scene
+    camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 10000 );
+    camera.position.set( 0, 150, 400 );
+    camera.target = new THREE.Vector3( 0, 150, 0 );
+
+    scene  = new THREE.Scene();
+    scene.add(camera);
+
+
+    addBoard(scene);
+
+
+
+    // set up the sphere vars
+    var radius = 200,
+      segments = 128,
+      rings = 128;
+
+    // add the sphere to the scene
+//    scene.add(createSphere(radius, segments, rings));
+
+    // create a point light
+    var pointLight =
+      new THREE.PointLight(0xFFFFFF, 1);
+
+    // set its position
+//    pointLight.position.x = 100;
+//    pointLight.position.y = 500;
+//    pointLight.position.z = 5300;
+
+    // add to the scene
+    scene.add(pointLight);
+
+
+    // create a WebGL renderer
+    renderer = new THREE.WebGLRenderer();
+
+    // start the renderer
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    container.append(renderer.domElement);
+  }
+
+  function createSphere(radius, segments, rings) {
+    // create the sphere's material
+    var sphereMaterial =
+      new THREE.MeshLambertMaterial({
+        color:0xCC0000
+      });
+
+    // create a new mesh with
+    // sphere geometry - we will cover
+    // the sphereMaterial next!
+    return new THREE.Mesh(
+
+      new THREE.SphereGeometry(
+        radius,
+        segments,
+        rings),
+
+      sphereMaterial);
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    render();
+  }
+
+  function render() {
+    renderer.render(scene, camera);
+  }
+
+  function addBoard(scene) {
+    // create the plane's material
+    var planeMaterial =
+      new THREE.MeshLambertMaterial({
+        color:0x00FF00
+      });
+
+    //
+    // create the board
+    //
+    var boardWidth = 160,
+      boardDepth = 160;
+
+    var board = new THREE.Mesh(
+
+      new THREE.PlaneGeometry(
+        boardWidth,
+        boardDepth, 10, 10),
+
+      planeMaterial);
+
+    // add the board to the scene
+    scene.add(board);
+
+  }
+
+</script>
+</html>
