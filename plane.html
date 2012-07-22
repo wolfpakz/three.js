@@ -22,125 +22,209 @@
   <script src="build/Three.js"></script>
 
   <script>
-    var camera, scene, renderer, container, projector, board, particle;
+    var camera, scene, renderer, container, projector, board, waypoint
+    var selection = {
+      start: null,
+      end: null,
+      complete: function() {
+        // get box bounds as a < b; c < d
+        if (this.end.x < this.start.x) {
+          a = this.end.x
+          b = this.start.x
+        } else {
+          a = this.start.x
+          b = this.end.x
+        }
+        if (this.end.z < this.start.z) {
+          c = this.end.z
+          d = this.start.z
+        } else {
+          c = this.start.z
+          d = this.end.z
+        }
 
-    if (!Detector.webgl) Detector.addGetWebGLMessage();
+        // walk every mob and see if they are in our box
+        for (var i = 0; i < mobs.length; i++) {
+          x = mobs[i].position.x
+          z = mobs[i].position.z
+          if (a < x && x < b && c < z && z < d) {
+            // then mob is selected!
+//            mobs[i].select()
+            mobs[i].material.color = new THREE.Color(0x0000CC)
+          }
+        }
 
-    init();
-    animate();
+      }, // end complete
+
+      begin: function(where) {
+        this.start = where // no need to clone because it was created anew in 'translate point'
+      }, // end begin
+
+      reset: function() {
+        this.start = null
+        this.end   = null
+        
+        scene.remove(this.box)
+        this.box = null
+        
+        // walk every mob and reset color
+        for (var i = 0; i < mobs.length; i++) {
+          mobs[i].material.color = new THREE.Color(0xff6666)
+        }
+
+      } // end reset
+    }
+    var mobs = []
+
+    if (!Detector.webgl) Detector.addGetWebGLMessage()
+
+    init()
+    animate()
 
     function init() {
-      container = document.createElement( 'div' );
-      document.body.appendChild( container );
+      container = document.createElement( 'div' )
+      document.body.appendChild( container )
 
       // Create a camera and position it
-      camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 10000 );
-      camera.position.set( 0, 90, 160 );
+      camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 10000 )
+      camera.position.set( 0, 90, 160 )
 
       // We eventually do camera.lookAt, so we don't need a target
       //camera.target = new THREE.Vector3( 0, 150, 0 );
 
       // Create the scene, and add our camera to it
-      scene = new THREE.Scene();
-      scene.add(camera);
+      scene = new THREE.Scene()
+      scene.add(camera)
 
       // Put the land down
-      addBoard(scene);
-
-      // Put a guy in the middle of the land
-      addMob(scene, new THREE.Vector3( 0, 0, 0 ));
+      addBoard()
 
       // Create ambient point light
-      addDefaultLight(scene);
+      addDefaultLight()
 
       // Create projector to help decide where click landed on the land
-      projector = new THREE.Projector();
+      projector = new THREE.Projector()
 
-      // create a WebGL renderer to render our objects with
-      renderer = new THREE.WebGLRenderer();
+      // Create a WebGL renderer to render our objects with
+      renderer = new THREE.WebGLRenderer()
 
-      // start the renderer, FIXME: resizable window, plz
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      container.appendChild(renderer.domElement);
+      // Start the renderer, FIXME: resizable window, plz
+      renderer.setSize(window.innerWidth, window.innerHeight)
+      container.appendChild(renderer.domElement)
 
-      // listen for clicks
-      document.addEventListener( 'mousedown', onDocumentMouseDown, false );
+      // Listen for clicks
+      document.addEventListener('mousedown', onMouseDown, false)
+      document.addEventListener('mousemove', onMouseMove, false)
+      document.addEventListener('mouseup',   onMouseUp,   false)
+      
     } // END init
 
-    function onDocumentMouseDown(event) {
-      event.preventDefault();
+    function onMouseDown(event) {
+      event.preventDefault()
 
-      var vector = new THREE.Vector3(( event.clientX / window.innerWidth ) * 2 - 1,
-                                    -( event.clientY / window.innerHeight ) * 2 + 1, 0.5);
-      projector.unprojectVector(vector, camera);
-
-      var ray        = new THREE.Ray(camera.position, vector.subSelf(camera.position).normalize());
-      var intersects = ray.intersectObjects([board]);
-
-      // If there is at least one point our click intersects the board with, put use first point
-      if (intersects.length > 0) {
-        particle = addMob(scene, intersects[0].point)
+      var click_point = translateClick(event.clientX, event.clientY)
+      
+      // Shift-click to add a new mob
+      if (event.shiftKey) {
+        addMob(click_point)
+      } else if (event.altKey) {
+        // If there is at least one point our click intersects the board with, put use first point
+        waypoint = addWaypoint(click_point)
+      } else {
+        selection.begin(click_point)
       }
     } // END onDocumentMouseDown
 
-    function addMob(scene, pos) {
-        var mob = createSphere(1, 32, 16)
-        mob.position = pos
-        mob.position.y = 1
-        scene.add(mob)
-        return mob
-    } // END createMob
+    function onMouseUp(event) {
+      event.preventDefault();
 
-    function createSphere(radius, segments, rings) {
-      // create the sphere's material
-      var sphereMaterial =
-        new THREE.MeshLambertMaterial({
-          color:0xCC6666
-        });
-
-      // create a new mesh with sphere geometry - we will cover the sphereMaterial next!
-      return new THREE.Mesh(
-
-        new THREE.SphereGeometry(
-          radius,
-          segments,
-          rings),
-
-        sphereMaterial);
-    } // END createSphere
-
-    function animate() {
-      // put this function in Animation queue (as defined by Chrome?) for next time step
-      requestAnimationFrame(animate);
-
-      // move a single particle
-      if (particle) {
-        particle.translateZ(1);
+      if (selection.start) {
+        selection.end = translateClick(event.clientX, event.clientY)
+        selection.complete()
+        selection.reset()
       }
-      // this is the guts of animate, call our render function.
-      render();
-    } // END animate
+    } // END onDocumentMouseUp
+    
+    function onMouseMove(event) {
+      event.preventDefault()
+      
+      if (selection.start) {
+        addSelectionBox(translateClick(event.clientX, event.clientY))
+      }
+    }// END onDocumentMouseMove
+    
+    function translateClick(clientX, clientY) {
+      var vector = new THREE.Vector3(( clientX / window.innerWidth ) * 2 - 1,
+                                    -( clientY / window.innerHeight ) * 2 + 1, 0.5)
 
-    function render() {
-      camera.lookAt(scene.position);
-      renderer.render(scene, camera);
-    } // END render
+      projector.unprojectVector(vector, camera)
+      var ray        = new THREE.Ray(camera.position, vector.subSelf(camera.position).normalize())
+      var intersects = ray.intersectObjects([board])
 
-    function addBoard(scene) {
+      if (intersects.length <= 0) {
+        return false; // what does false actually 'do' FIXME
+      }
+      return intersects[0].point // What about multiple values?  Planar is safe.
+    }// END translateClick
+
+
+    function addSelectionBox(pos) {
+
+      if (selection.box) {
+        scene.remove(selection.box)
+      }
+
+      var x = pos.x - selection.start.x
+      var z = pos.z - selection.start.z
+      
+      // FIXME too much work to recreate box everytime?  right?  jsperf.com
+      selection.box = createBox(Math.abs(x), 0.1, Math.abs(z))
+      selection.box.position = selection.start.clone()
+      selection.box.position.x = selection.start.x + x/2
+      selection.box.position.z = selection.start.z + z/2
+      
+      scene.add(selection.box)
+    } // END addSelectionBox
+/*
+ * ADD
+ */
+    function addMob(pos) {
+      var mob = createSphere(1, 32, 16)
+      mob.position = pos
+      mob.position.y = 1
+      mobs.push(mob)
+      scene.add(mob)
+      return mob
+    } // END addMob
+
+    function addWaypoint(pos) {
+      var waypt = createSphere(1.5, 32, 16)
+      waypt.position = pos
+
+      // Remove any prior waypoints
+      if (waypoint) {
+        scene.remove(waypoint)
+      }
+
+      scene.add(waypt)
+      return waypt
+    } // END addWaypoint
+
+    function addBoard() {
       // create the board's material
       var material = new THREE.MeshLambertMaterial({
         color:0x339933
       });
 
       // create the board
-      var boardWidth = 160, boardDepth = 160;
-      var geometry   = new THREE.PlaneGeometry(boardWidth, boardDepth, 10, 10);
-      board          = new THREE.Mesh(geometry, material);
+      var boardWidth = 160, boardDepth = 160
+      var geometry   = new THREE.PlaneGeometry(boardWidth, boardDepth, 10, 10)
+      board          = new THREE.Mesh(geometry, material)
 
       scene.add(board);
     } // END addBoard
 
-    function addDefaultLight(scene) {
+    function addDefaultLight() {
       // create a point light
       var pointLight = new THREE.PointLight(0xFFFFFF, 1.0);
 
@@ -151,6 +235,61 @@
 
       // add to the scene
       scene.add(pointLight);
-    }
+    } // END addDefaultLight
+    
+// create Funcs
+    function createSphere(radius, segments, rings) {
+      // create the sphere's material
+      var sphereMaterial =
+        new THREE.MeshLambertMaterial({
+          color:0xFF6666
+        });
+
+      // create a new mesh with sphere geometry
+      return new THREE.Mesh(
+
+        new THREE.SphereGeometry(
+          radius,
+          segments,
+          rings),
+
+        sphereMaterial);
+    } // END createSphere
+
+    function createBox(w,h,d) {
+      // create the sphere's material
+      var boxMaterial =
+        new THREE.MeshLambertMaterial({
+          color:0x999999,
+          opacity: 0.8
+        });
+
+      // create a new mesh with box geometry
+      return new THREE.Mesh(
+        new THREE.CubeGeometry(w,h,d), boxMaterial
+      )
+    } // END createBox
+
+// Funcs
+    function animate() {
+      // put this function in Animation queue (as defined by Chrome?) for next time step
+      requestAnimationFrame(animate);
+
+      // move mobs
+      if (waypoint) {
+        for (var i = 0; i < mobs.length; i++) {
+          mobs[i].translate(1, new THREE.Vector3().sub( waypoint.position, mobs[i].position ).normalize() )
+        }
+      }
+      // this is the guts of animate, call our render function.
+      render()
+    } // END animate
+
+    function render() {
+      camera.lookAt(scene.position)
+      renderer.render(scene, camera)
+    } // END render
+
+
   </script>
 </html>
