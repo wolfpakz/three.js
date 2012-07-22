@@ -22,7 +22,8 @@
   <script src="build/Three.js"></script>
 
   <script>
-    var camera, scene, renderer, container, projector, board, waypoint
+    var camera, scene, renderer, container, projector, board, waypoint, counter = 0
+    var selected_mobs = []
     var selection = {
       start: null,
       end: null,
@@ -43,36 +44,33 @@
           d = this.end.z
         }
 
+        // Purge list of selected mobs
+        selected_mobs = []
+        
         // walk every mob and see if they are in our box
         for (var i = 0; i < mobs.length; i++) {
+          mobs[i].deselect()
           x = mobs[i].position.x
           z = mobs[i].position.z
           if (a < x && x < b && c < z && z < d) {
             // then mob is selected!
-//            mobs[i].select()
-            mobs[i].material.color = new THREE.Color(0x0000CC)
+            mobs[i].select()
+            selected_mobs.push(mobs[i])
           }
         }
-
-      }, // end complete
+      }, // END complete
 
       begin: function(where) {
         this.start = where // no need to clone because it was created anew in 'translate point'
-      }, // end begin
+      }, // END begin
 
       reset: function() {
         this.start = null
         this.end   = null
         
         scene.remove(this.box)
-        this.box = null
-        
-        // walk every mob and reset color
-        for (var i = 0; i < mobs.length; i++) {
-          mobs[i].material.color = new THREE.Color(0xff6666)
-        }
-
-      } // end reset
+        this.box   = null
+      } // END reset
     }
     var mobs = []
 
@@ -116,6 +114,7 @@
       document.addEventListener('mousedown', onMouseDown, false)
       document.addEventListener('mousemove', onMouseMove, false)
       document.addEventListener('mouseup',   onMouseUp,   false)
+      document.addEventListener('contextmenu', onRightClick, false)
       
     } // END init
 
@@ -123,15 +122,19 @@
       event.preventDefault()
 
       var click_point = translateClick(event.clientX, event.clientY)
+      var right_click;
+      if (!e) var e = window.event;
+      if (e.which) right_click = (e.which == 3);
+      else if (e.button) right_click = (e.button == 2);      
       
-      // Shift-click to add a new mob
-      if (event.shiftKey) {
-        addMob(click_point)
-      } else if (event.altKey) {
-        // If there is at least one point our click intersects the board with, put use first point
-        waypoint = addWaypoint(click_point)
-      } else {
-        selection.begin(click_point)
+      if (!right_click) {
+        if (event.shiftKey) {
+          // Shift-click to add a new mob
+          addMob(click_point)
+          return false
+        } else {
+          selection.begin(click_point)
+        }
       }
     } // END onDocumentMouseDown
 
@@ -152,6 +155,15 @@
         addSelectionBox(translateClick(event.clientX, event.clientY))
       }
     }// END onDocumentMouseMove
+    
+    function onRightClick(event) {
+      event.preventDefault();
+      var click_point = translateClick(event.clientX, event.clientY)
+            
+      // If there is at least one point our click intersects the board with, put use first point
+      waypoint = addWaypoint(click_point)
+      return false
+    }
     
     function translateClick(clientX, clientY) {
       var vector = new THREE.Vector3(( clientX / window.innerWidth ) * 2 - 1,
@@ -190,6 +202,17 @@
  */
     function addMob(pos) {
       var mob = createSphere(1, 32, 16)
+      mob.selected = false
+      mob.select = function() {
+        this.selected = true
+        this.material.color = new THREE.Color(0x0000CC)
+      }
+      mob.deselect = function() {
+        this.selected = false
+        this.material.color = new THREE.Color(0xFF6666)
+      }
+      counter += 1
+      mob.id = counter
       mob.position = pos
       mob.position.y = 1
       mobs.push(mob)
@@ -198,6 +221,8 @@
     } // END addMob
 
     function addWaypoint(pos) {
+      if (selected_mobs.length == 0) return;
+      
       var waypt = createSphere(1.5, 32, 16)
       waypt.position = pos
 
@@ -278,7 +303,9 @@
       // move mobs
       if (waypoint) {
         for (var i = 0; i < mobs.length; i++) {
-          mobs[i].translate(1, new THREE.Vector3().sub( waypoint.position, mobs[i].position ).normalize() )
+          if (mobs[i].selected) {
+            mobs[i].translate(1, new THREE.Vector3().sub( waypoint.position, mobs[i].position ).normalize() )
+          }
         }
       }
       // this is the guts of animate, call our render function.
