@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <title>Show me a plane, damnit!!</title>
+    <title>RTS Playground</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
     <style>
@@ -17,14 +17,12 @@
   <body>
   </body>
 
-  <script language="javascript" type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
-
   <script src="examples/js/Detector.js"></script>
   <script src="examples/js/Stats.js"></script>
   <script src="build/Three.js"></script>
 
   <script>
-    var camera, scene, renderer, container, projector, board;
+    var camera, scene, renderer, container, projector, board, particle;
 
     if (!Detector.webgl) Detector.addGetWebGLMessage();
 
@@ -35,73 +33,72 @@
       container = document.createElement( 'div' );
       document.body.appendChild( container );
 
-      // create a camera and scene
+      // Create a camera and position it
       camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 10000 );
       camera.position.set( 0, 90, 160 );
-      camera.target = new THREE.Vector3( 0, 150, 0 );
 
-      scene  = new THREE.Scene();
+      // We eventually do camera.lookAt, so we don't need a target
+      //camera.target = new THREE.Vector3( 0, 150, 0 );
+
+      // Create the scene, and add our camera to it
+      scene = new THREE.Scene();
       scene.add(camera);
 
+      // Put the land down
       addBoard(scene);
 
-      var sphere = createSphere(1, 32, 16)
-      sphere.position.y = 1
-      scene.add(sphere)
+      // Put a guy in the middle of the land
+      addMob(scene, new THREE.Vector3( 0, 0, 0 ));
 
-      // create a point light
-      var pointLight = new THREE.PointLight(0xFFFFFF, 1.5);
+      // Create ambient point light
+      addDefaultLight(scene);
 
-      // set its position
-      pointLight.position.x = 0;
-      pointLight.position.y = 100;
-      pointLight.position.z = 0;
-
-      // add to the scene
-      scene.add(pointLight);
-
+      // Create projector to help decide where click landed on the land
       projector = new THREE.Projector();
 
-      // create a WebGL renderer
+      // create a WebGL renderer to render our objects with
       renderer = new THREE.WebGLRenderer();
 
-      // start the renderer
+      // start the renderer, FIXME: resizable window, plz
       renderer.setSize(window.innerWidth, window.innerHeight);
       container.appendChild(renderer.domElement);
 
       // listen for clicks
       document.addEventListener( 'mousedown', onDocumentMouseDown, false );
-    }
+    } // END init
 
     function onDocumentMouseDown(event) {
       event.preventDefault();
 
-      var vector = new THREE.Vector3(( event.clientX / window.innerWidth ) * 2 - 1, -( event.clientY / window.innerHeight ) * 2 + 1, 0.5);
+      var vector = new THREE.Vector3(( event.clientX / window.innerWidth ) * 2 - 1,
+                                    -( event.clientY / window.innerHeight ) * 2 + 1, 0.5);
       projector.unprojectVector(vector, camera);
 
       var ray        = new THREE.Ray(camera.position, vector.subSelf(camera.position).normalize());
       var intersects = ray.intersectObjects([board]);
 
+      // If there is at least one point our click intersects the board with, put use first point
       if (intersects.length > 0) {
-        var particle = createSphere(1, 32, 16)
-
-        particle.position = intersects[0].point
-        particle.position.y = 1
-
-        scene.add(particle)
+        particle = addMob(scene, intersects[0].point)
       }
-    }
+    } // END onDocumentMouseDown
+
+    function addMob(scene, pos) {
+        var mob = createSphere(1, 32, 16)
+        mob.position = pos
+        mob.position.y = 1
+        scene.add(mob)
+        return mob
+    } // END createMob
 
     function createSphere(radius, segments, rings) {
       // create the sphere's material
       var sphereMaterial =
         new THREE.MeshLambertMaterial({
-          color:0xCC0000
+          color:0xCC6666
         });
 
-      // create a new mesh with
-      // sphere geometry - we will cover
-      // the sphereMaterial next!
+      // create a new mesh with sphere geometry - we will cover the sphereMaterial next!
       return new THREE.Mesh(
 
         new THREE.SphereGeometry(
@@ -110,22 +107,29 @@
           rings),
 
         sphereMaterial);
-    }
+    } // END createSphere
 
     function animate() {
+      // put this function in Animation queue (as defined by Chrome?) for next time step
       requestAnimationFrame(animate);
+
+      // move a single particle
+      if (particle) {
+        particle.translateZ(1);
+      }
+      // this is the guts of animate, call our render function.
       render();
-    }
+    } // END animate
 
     function render() {
-      camera.lookAt(scene.position)
+      camera.lookAt(scene.position);
       renderer.render(scene, camera);
-    }
+    } // END render
 
     function addBoard(scene) {
       // create the board's material
       var material = new THREE.MeshLambertMaterial({
-        color:0xFFFFFF
+        color:0x339933
       });
 
       // create the board
@@ -134,7 +138,19 @@
       board          = new THREE.Mesh(geometry, material);
 
       scene.add(board);
-    }
+    } // END addBoard
 
+    function addDefaultLight(scene) {
+      // create a point light
+      var pointLight = new THREE.PointLight(0xFFFFFF, 1.0);
+
+      // set its position
+      pointLight.position.x = 0;
+      pointLight.position.y = 500;
+      pointLight.position.z = 0;
+
+      // add to the scene
+      scene.add(pointLight);
+    }
   </script>
 </html>
