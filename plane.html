@@ -22,54 +22,113 @@
   <script src="build/Three.js"></script>
 
   <script>
-    var camera, scene, renderer, container, projector, board, waypoint, counter = 0
-    var selected_mobs = []
+    var camera, scene, renderer, container, projector, board, counter = 0
+    var selected_ids = []
     var selection = {
-      start: null,
-      end: null,
+      waypoint: null,
+      shape: null,
       complete: function() {
-        // get box bounds as a < b; c < d
-        if (this.end.x < this.start.x) {
-          a = this.end.x
-          b = this.start.x
-        } else {
-          a = this.start.x
-          b = this.end.x
-        }
-        if (this.end.z < this.start.z) {
-          c = this.end.z
-          d = this.start.z
-        } else {
-          c = this.start.z
-          d = this.end.z
-        }
-
         // Purge list of selected mobs
-        selected_mobs = []
-        
-        // walk every mob and see if they are in our box
+        selected_ids = this.shape.selectedMobs()
         for (var i = 0; i < mobs.length; i++) {
           mobs[i].deselect()
-          x = mobs[i].position.x
-          z = mobs[i].position.z
-          if (a < x && x < b && c < z && z < d) {
-            // then mob is selected!
-            mobs[i].select()
-            selected_mobs.push(mobs[i])
+
+          if (selected_ids.indexOf(mobs[i].id) != -1) {
+            mobs[i].select(this.waypoint)
           }
         }
       }, // END complete
 
-      begin: function(where) {
-        this.start = where // no need to clone because it was created anew in 'translate point'
-      }, // END begin
+      beginSelectionBox: function(pos) {
+        if (this.shape) {
+          scene.remove(this.shape)
+        }
+        this.shape = createBox(.1, .1, .1)
+        this.shape.start = pos.clone() // Must be a cloned/new vector!
+        this.shape.position = this.shape.start.clone()
+        scene.add(this.shape)
+
+        this.shape.resizeTo = function(pos) {
+          var x = pos.x - this.start.x
+          var z = pos.z - this.start.z
+
+          this.scale.x    = Math.max(.1, Math.abs(x)*10)
+          this.scale.z    = Math.max(.1, Math.abs(z)*10)
+          this.position.x = this.start.x + x/2
+          this.position.z = this.start.z + z/2
+        } // END resizeTo
+        
+        this.shape.selectedMobs = function() {
+          // get box bounds as a < b; c < d
+          if (this.end.x < this.start.x) {
+            a = this.end.x
+            b = this.start.x
+          } else {
+            a = this.start.x
+            b = this.end.x
+          }
+          if (this.end.z < this.start.z) {
+            c = this.end.z
+            d = this.start.z
+          } else {
+            c = this.start.z
+            d = this.end.z
+          }
+          // walk every mob and see if they are in our box
+          var list = []
+          for (var i = 0; i < mobs.length; i++) {
+            x = mobs[i].position.x
+            z = mobs[i].position.z
+            if (a < x && x < b && c < z && z < d) {
+              list.push(mobs[i].id)
+            }
+          }
+          return list
+        }
+
+      }, // END beginSelectionBox
+
+      beginSelectionCircle: function(pos) {
+        if (selection.shape) {
+          scene.remove(selection.shape)
+        }
+        this.shape = createCircle(.1)
+        this.shape.start = pos.clone()
+        this.shape.position = this.shape.start.clone()
+        scene.add(this.shape)
+
+        this.shape.resizeTo = function(pos) {
+          var dist = new THREE.Vector3().sub(pos, this.start)
+
+          this.scale.x    = Math.max(.1, dist.length()*10)
+          this.scale.z    = Math.max(.1, dist.length()*10)
+        }
+        
+        this.shape.selectedMobs = function() {
+          var dist = new THREE.Vector3().sub (this.end, this.start)
+
+          // walk every mob and see if they are in our circle
+          if (dist.length() < .2)
+            return selected_ids
+          var list = []
+          for (var i = 0; i < mobs.length; i++) {
+            var d = new THREE.Vector3().sub(mobs[i].position, this.start)
+            if (d.length() < dist.length()) {
+              // then mob is selected!
+              list.push(mobs[i].id)
+            }
+          }
+          return list
+        }
+      }, // END beginSelectionCircle
 
       reset: function() {
-        this.start = null
-        this.end   = null
-        
-        scene.remove(this.box)
-        this.box   = null
+        if (this.waypoint) {
+          scene.remove(this.waypoint) // FIXME this is code reuse
+          this.waypoint = null
+        }
+        scene.remove(this.shape)
+        this.shape = null
       } // END reset
     }
     var mobs = []
@@ -84,8 +143,8 @@
       document.body.appendChild( container )
 
       // Create a camera and position it
-      camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 10000 )
-      camera.position.set( 0, 90, 160 )
+      camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 1000 )
+      camera.position.set( 0, 80, 140 )
 
       // We eventually do camera.lookAt, so we don't need a target
       //camera.target = new THREE.Vector3( 0, 150, 0 );
@@ -118,22 +177,33 @@
       
     } // END init
 
-    function onMouseDown(event) {
-      event.preventDefault()
-
-      var click_point = translateClick(event.clientX, event.clientY)
+    function rightClick(event) {
       var right_click;
       if (!e) var e = window.event;
       if (e.which) right_click = (e.which == 3);
-      else if (e.button) right_click = (e.button == 2);      
-      
-      if (!right_click) {
+      else if (e.button) right_click = (e.button == 2);
+      return right_click
+    } // END rightClick
+    
+    function onMouseDown(event) {
+      event.preventDefault()
+      var click_point = translateClick(event.clientX, event.clientY)
+      if (!click_point) {
+        return false
+      }
+      var team = event.altKey ? 0x333399 : 0x993333
+      if (!rightClick(event)) {
         if (event.shiftKey) {
           // Shift-click to add a new mob
-          addMob(click_point)
-          return false
+          addMob(click_point, team)
         } else {
-          selection.begin(click_point)
+          selection.reset()
+          selection.beginSelectionBox(click_point)
+        }
+      } else {
+        selection.beginSelectionCircle(click_point)
+        if (rightClick(event)) {
+          selection.waypoint = createWaypoint(selection.shape.start, team)
         }
       }
     } // END onDocumentMouseDown
@@ -141,27 +211,26 @@
     function onMouseUp(event) {
       event.preventDefault();
 
-      if (selection.start) {
-        selection.end = translateClick(event.clientX, event.clientY)
+      if (selection.shape) {
+        selection.shape.end = translateClick(event.clientX, event.clientY)
         selection.complete()
         selection.reset()
       }
+
     } // END onDocumentMouseUp
     
     function onMouseMove(event) {
       event.preventDefault()
       
-      if (selection.start) {
-        addSelectionBox(translateClick(event.clientX, event.clientY))
+      if (selection.shape) {
+        var pt = translateClick(event.clientX, event.clientY)
+        if (pt)
+          selection.shape.resizeTo(pt)
       }
     }// END onDocumentMouseMove
     
     function onRightClick(event) {
       event.preventDefault();
-      var click_point = translateClick(event.clientX, event.clientY)
-            
-      // If there is at least one point our click intersects the board with, put use first point
-      waypoint = addWaypoint(click_point)
       return false
     }
     
@@ -176,64 +245,69 @@
       if (intersects.length <= 0) {
         return false; // what does false actually 'do' FIXME
       }
-      return intersects[0].point // What about multiple values?  Planar is safe.
+      return intersects[0].point.addSelf(new THREE.Vector3(0,1,0)) // What about multiple values?  Planar is safe.
     }// END translateClick
 
-
-    function addSelectionBox(pos) {
-
-      if (selection.box) {
-        scene.remove(selection.box)
-      }
-
-      var x = pos.x - selection.start.x
-      var z = pos.z - selection.start.z
-      
-      // FIXME too much work to recreate box everytime?  right?  jsperf.com
-      selection.box = createBox(Math.abs(x), 0.1, Math.abs(z))
-      selection.box.position = selection.start.clone()
-      selection.box.position.x = selection.start.x + x/2
-      selection.box.position.z = selection.start.z + z/2
-      
-      scene.add(selection.box)
-    } // END addSelectionBox
 /*
  * ADD
  */
-    function addMob(pos) {
+    function addMob(pos, team_input) {
       var mob = createSphere(1, 32, 16)
-      mob.selected = false
-      mob.select = function() {
+      mob.team = team_input // Team colors cannot be above x999999 for x666666 to lighten them
+      mob.destination = null
+      mob.waypoint = null
+      mob.destline = null
+
+
+      mob.select = function(waypoint) {
+        // If we're trying to assign a waypoint, check that the teams match
+        if (waypoint && waypoint.team != mob.team)
+          return
+
+        // Define this mob as selected by setting a logical, and putting in a list.
         this.selected = true
-        this.material.color = new THREE.Color(0x0000CC)
-      }
+        this.material.color = new THREE.Color(this.team + 0x666666)
+        //selected_mobs.push(this)
+
+        // If there is a waypoint associated with this selection, change my destination to it
+        if (waypoint) {
+          this.destination = waypoint.position.clone()
+        }
+        // I'm selected, so show my destination
+        if (this.destination) {
+          this.waypoint = createWaypoint (this.destination, this.team)
+          this.destline = createLine (this.position, this.destination, this.team)
+        }
+      } // END select
+
+
       mob.deselect = function() {
         this.selected = false
-        this.material.color = new THREE.Color(0xFF6666)
-      }
-      counter += 1
-      mob.id = counter
+        this.material.color = new THREE.Color(mob.team) // No need to keep creating colors FIXME
+
+        // Remove my waypoint & line from the scene
+        if (this.waypoint) {
+          scene.remove(this.waypoint)
+          this.waypoint = null
+        }
+        if (this.destline) {
+          scene.remove(this.destline)
+          this.destline = null
+        }
+      } // END deselect
+
+      // Put the mob as position, pull it out of the plane, set default color
       mob.position = pos
       mob.position.y = 1
+      mob.deselect()
+
+      // Add mobs to the global list, increment counter, add it to the scene
       mobs.push(mob)
+      counter += 1
+      mob.id = counter
       scene.add(mob)
       return mob
     } // END addMob
-
-    function addWaypoint(pos) {
-      if (selected_mobs.length == 0) return;
-      
-      var waypt = createSphere(1.5, 32, 16)
-      waypt.position = pos
-
-      // Remove any prior waypoints
-      if (waypoint) {
-        scene.remove(waypoint)
-      }
-
-      scene.add(waypt)
-      return waypt
-    } // END addWaypoint
 
     function addBoard() {
       // create the board's material
@@ -251,7 +325,7 @@
 
     function addDefaultLight() {
       // create a point light
-      var pointLight = new THREE.PointLight(0xFFFFFF, 1.0);
+      var pointLight = new THREE.PointLight(0xFFFFFF, 1.2);
 
       // set its position
       pointLight.position.x = 0;
@@ -266,9 +340,7 @@
     function createSphere(radius, segments, rings) {
       // create the sphere's material
       var sphereMaterial =
-        new THREE.MeshLambertMaterial({
-          color:0xFF6666
-        });
+        new THREE.MeshLambertMaterial({})
 
       // create a new mesh with sphere geometry
       return new THREE.Mesh(
@@ -295,17 +367,57 @@
       )
     } // END createBox
 
+    function createCircle(r) {
+      // create the sphere's material
+      var circleMaterial =
+        new THREE.MeshLambertMaterial({
+          color:0x999933,
+          opacity: 0.8
+        });
+
+      // create a new mesh with cylinder geometry
+      return new THREE.Mesh(
+        new THREE.CylinderGeometry(r, r, .1, 32), circleMaterial
+      )
+    } // END createCircle
+
+    function createWaypoint (pos, team_input) {
+      // Make a translucent dome with the team's color
+      var waypoint = createSphere(3, 32, 16)
+      waypoint.team = team_input
+      waypoint.material.color = new THREE.Color( waypoint.team )
+      waypoint.material.opacity = 0.7
+      waypoint.position = pos.clone()
+      scene.add(waypoint)
+
+      return waypoint
+    } // END createWaypoint
+
+    function createLine (from, to, team_input) { // FIXME, not showing.
+      // Make a translucent line with the team's color
+      var material = new THREE.LineBasicMaterial({ color:0xFF0000})
+//      material.color = new THREE.Color( team_input )
+      var geometry = new THREE.Geometry()
+      geometry.vertices.push(new THREE.Vector3(from))
+      geometry.vertices.push(new THREE.Vector3(to))
+      geometry.vertices.push(new THREE.Vector3(0,0,0))
+
+      var line = new THREE.Line(geometry, material)
+      scene.add(line)
+
+      return line
+    } // END createLine
+
+
 // Funcs
     function animate() {
       // put this function in Animation queue (as defined by Chrome?) for next time step
       requestAnimationFrame(animate);
 
       // move mobs
-      if (waypoint) {
-        for (var i = 0; i < mobs.length; i++) {
-          if (mobs[i].selected) {
-            mobs[i].translate(1, new THREE.Vector3().sub( waypoint.position, mobs[i].position ).normalize() )
-          }
+      for (var i = 0; i < mobs.length; i++) {
+        if (mobs[i].destination) {
+          mobs[i].translate(.05, new THREE.Vector3().sub( mobs[i].destination, mobs[i].position ).normalize() )
         }
       }
       // this is the guts of animate, call our render function.
