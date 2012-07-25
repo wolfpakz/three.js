@@ -56,7 +56,7 @@
           this.scale.z    = Math.max(.1, Math.abs(z)*10)
           this.position.x = this.start.x + x/2
           this.position.z = this.start.z + z/2
-        } // END resizeTo
+        } // END shape.resizeTo
         
         this.shape.selectedMobs = function() {
           // get box bounds as a < b; c < d
@@ -84,7 +84,7 @@
             }
           }
           return list
-        }
+        } // END shape.selectedMobs
 
       }, // END beginSelectionBox
 
@@ -144,7 +144,7 @@
 
       // Create a camera and position it
       camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 1000 )
-      camera.position.set( 0, 80, 140 )
+      camera.position.set( 0, 120, 150 )
 
       // We eventually do camera.lookAt, so we don't need a target
       //camera.target = new THREE.Vector3( 0, 150, 0 );
@@ -227,12 +227,12 @@
         if (pt)
           selection.shape.resizeTo(pt)
       }
-    }// END onDocumentMouseMove
+    } // END onDocumentMouseMove
     
     function onRightClick(event) {
       event.preventDefault();
       return false
-    }
+    } // END onRightClick
     
     function translateClick(clientX, clientY) {
       var vector = new THREE.Vector3(( clientX / window.innerWidth ) * 2 - 1,
@@ -246,7 +246,7 @@
         return false; // what does false actually 'do' FIXME
       }
       return intersects[0].point.addSelf(new THREE.Vector3(0,1,0)) // What about multiple values?  Planar is safe.
-    }// END translateClick
+    } // END translateClick
 
 /*
  * ADD
@@ -311,12 +311,17 @@
 
     function addBoard() {
       // create the board's material
+      var texture = THREE.ImageUtils.loadTexture('grass-and-ground-seamless.jpg')
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.x = 4;
+      texture.repeat.y = 4;
       var material = new THREE.MeshLambertMaterial({
-        color:0x339933
+        map:texture
       });
 
       // create the board
-      var boardWidth = 160, boardDepth = 160
+      var boardWidth = 512, boardDepth = 512
       var geometry   = new THREE.PlaneGeometry(boardWidth, boardDepth, 10, 10)
       board          = new THREE.Mesh(geometry, material)
 
@@ -325,7 +330,7 @@
 
     function addDefaultLight() {
       // create a point light
-      var pointLight = new THREE.PointLight(0xFFFFFF, 1.2);
+      var pointLight = new THREE.PointLight(0xFFFFFF, 1.0);
 
       // set its position
       pointLight.position.x = 0;
@@ -357,8 +362,8 @@
       // create the sphere's material
       var boxMaterial =
         new THREE.MeshLambertMaterial({
-          color:0x999999,
-          opacity: 0.8
+          color:0xAAAAAA,
+          opacity: 0.6
         });
 
       // create a new mesh with box geometry
@@ -372,7 +377,7 @@
       var circleMaterial =
         new THREE.MeshLambertMaterial({
           color:0x999933,
-          opacity: 0.8
+          opacity: 0.6
         });
 
       // create a new mesh with cylinder geometry
@@ -400,7 +405,7 @@
       var geometry = new THREE.Geometry()
       geometry.vertices.push(new THREE.Vector3(from))
       geometry.vertices.push(new THREE.Vector3(to))
-      geometry.vertices.push(new THREE.Vector3(0,0,0))
+//      geometry.vertices.push(new THREE.Vector3(0,0,0))
 
       var line = new THREE.Line(geometry, material)
       scene.add(line)
